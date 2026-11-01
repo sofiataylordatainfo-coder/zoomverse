@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#070304">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zombie Run">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>ZOMBIE RUN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Special+Elite&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#070304;--blood:#8a0303;--red:#ff1a1a;--dark:#2a0505;--bone:#e6dccb;--muted:#8b7b78}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--bone);font-family:'Special Elite',ui-monospace,monospace;overflow:hidden;overscroll-behavior:none;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-text-size-adjust:100%}
+input{-webkit-user-select:text;user-select:text}
+h1,h2,.creep{font-family:'Creepster','Impact',sans-serif;letter-spacing:.06em;font-weight:400}
+#fog{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.vignette{position:fixed;inset:0;z-index:50;pointer-events:none;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,.85) 100%)}
+.scan{position:fixed;inset:0;z-index:51;pointer-events:none;opacity:.07;background:repeating-linear-gradient(0deg,#000 0 1px,transparent 1px 3px)}
+#danger{position:fixed;inset:0;z-index:49;pointer-events:none;opacity:0;box-shadow:inset 0 0 90px 20px var(--red)}
+#danger.on{animation:beat var(--beat,1.2s) ease-in-out infinite}
+@keyframes beat{0%,100%{opacity:.05}12%{opacity:.75}24%{opacity:.15}36%{opacity:.6}60%{opacity:.05}}
+
+/* dripping blood from the top */
+.drips{position:fixed;top:0;left:0;right:0;height:0;z-index:48;pointer-events:none}
+.drips:before{content:"";position:absolute;top:0;left:0;right:0;height:10px;background:linear-gradient(var(--blood),#5a0202);box-shadow:0 2px 12px #000}
+.drips span{position:absolute;top:6px;width:7px;border-radius:0 0 7px 7px;background:linear-gradient(#7a0202,#c40a0a);height:12px;transform-origin:top;animation:drip var(--d) ease-in infinite;animation-delay:var(--w)}
+.drips span:after{content:"";position:absolute;bottom:-4px;left:50%;width:9px;height:9px;margin-left:-4.5px;border-radius:50%;background:#c40a0a}
+@keyframes drip{0%{height:8px;opacity:1}55%{height:var(--h);opacity:1}85%{height:calc(var(--h) + 30px);opacity:.9}100%{height:calc(var(--h) + 60px);opacity:0}}
+
+.screen{position:fixed;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;padding:calc(34px + env(safe-area-inset-top)) 18px calc(20px + env(safe-area-inset-bottom));overflow:auto;-webkit-overflow-scrolling:touch}
+.screen.active{display:flex}
+.logo{font-size:clamp(54px,15vw,92px);line-height:.9;margin:22px 0 4px;text-align:center;color:var(--red);text-shadow:0 0 18px #a00,0 3px 0 #300,0 0 40px #600;animation:flicker 5s infinite}
+.logo small{display:block;font-size:.34em;color:var(--bone);letter-spacing:.35em;text-shadow:0 0 10px #000;margin-top:8px}
+@keyframes flicker{0%,18%,22%,62%,64%,100%{opacity:1}20%{opacity:.55}63%{opacity:.4}}
+.tag{color:var(--muted);text-align:center;max-width:420px;margin:6px 0 22px;font-size:14px}
+.card{width:100%;max-width:420px;background:linear-gradient(160deg,rgba(40,6,6,.88),rgba(12,2,2,.92));border:1px solid #5a0a0a;border-radius:14px;padding:18px;box-shadow:0 0 30px rgba(120,0,0,.35),inset 0 0 40px rgba(0,0,0,.6)}
+label{font-size:12px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase}
+input[type=text]{width:100%;margin:6px 0 14px;padding:13px 14px;background:#0b0303;border:1px solid #5a0a0a;border-radius:8px;color:var(--bone);font:inherit;font-size:18px;outline:none}
+input[type=text]:focus{border-color:var(--red);box-shadow:0 0 12px rgba(255,26,26,.4)}
+#code{text-transform:uppercase;letter-spacing:.45em;text-align:center;font-size:24px}
+button{font:inherit;cursor:pointer;min-height:48px;touch-action:manipulation;border:0;border-radius:8px;padding:14px 16px;font-size:18px;letter-spacing:.08em;color:#fff;background:linear-gradient(#b00a0a,#6a0303);box-shadow:0 4px 0 #2a0000,0 0 18px rgba(200,0,0,.35);text-transform:uppercase;transition:transform .1s,filter .15s}
+button:hover{filter:brightness(1.2)}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 #2a0000}
+button.ghost{background:transparent;border:1px solid #6a1010;box-shadow:none;color:var(--bone)}
+button:disabled{opacity:.4;pointer-events:none}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.or{text-align:center;color:var(--muted);margin:14px 0;font-size:13px;letter-spacing:.3em}
+.chk{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0}
+.chk input{width:18px;height:18px;accent-color:var(--red)}
+.foot{margin-top:16px;color:#5d4a48;font-size:11px;text-align:center;max-width:380px}
+
+/* lobby */
+.roomcode{font-size:clamp(50px,16vw,84px);letter-spacing:.14em;color:var(--red);text-shadow:0 0 20px #a00;margin:6px 0;text-align:center;user-select:all}
+.plist{list-style:none;padding:0;margin:14px 0}
+.plist li{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:6px 0;background:#120404;border:1px solid #3a0808;border-radius:8px;animation:rise .4s ease both}
+.plist li .dot{width:10px;height:10px;border-radius:50%;background:#3c9a3c;box-shadow:0 0 8px #3c9a3c}
+.plist li.off .dot{background:#555;box-shadow:none}
+.plist li .tagh{margin-left:auto;font-size:11px;color:var(--red);letter-spacing:.15em}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+.count{text-align:center;color:var(--muted);font-size:13px}
+
+/* game */
+#screen-game{padding:0;align-items:stretch}
+#top{position:relative;z-index:6;display:flex;align-items:center;justify-content:space-between;padding:calc(34px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 10px calc(14px + env(safe-area-inset-left));background:linear-gradient(#000,rgba(0,0,0,.65));border-bottom:2px solid var(--blood)}
+#time{font-family:'Creepster';font-size:46px;line-height:1;color:var(--bone);text-shadow:0 0 14px #800;min-width:110px}
+#time.low{color:var(--red);animation:pulse .6s infinite alternate}
+@keyframes pulse{to{transform:scale(1.08);text-shadow:0 0 24px #f00}}
+#phase{font-size:12px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:2px}
+#role{border:1px solid #6a1010;border-radius:20px;padding:8px 14px;font-size:13px;letter-spacing:.12em;background:#150404;cursor:pointer;user-select:none}
+#role.z{color:var(--red);border-color:var(--red);box-shadow:0 0 14px rgba(255,26,26,.5)}
+#role.h{color:#9fe0a0;border-color:#2c6a2c}
+#mapwrap{position:relative;flex:1;min-height:0}
+#map{position:absolute;inset:0;background:#0a0303}
+.leaflet-tile-pane{filter:sepia(1) saturate(4) hue-rotate(-52deg) brightness(.75) contrast(1.15)}
+.leaflet-container{font-family:inherit}
+.leaflet-control-attribution{background:rgba(0,0,0,.6)!important;color:#777!important;font-size:9px}
+.leaflet-control-attribution a{color:#a55!important}
+.leaflet-control-zoom{display:none}
+#recenter{position:absolute;right:12px;top:12px;z-index:500;width:46px;height:46px;padding:0;border-radius:50%;font-size:20px}
+#banner{position:absolute;left:10px;right:10px;top:12px;z-index:500;background:#4a0505;border:1px solid var(--red);padding:8px 12px;border-radius:8px;font-size:13px;display:none;margin-right:66px}
+#simhint{position:absolute;left:10px;bottom:12px;z-index:500;background:rgba(0,0,0,.75);border:1px dashed #a55;padding:5px 9px;border-radius:6px;font-size:11px;color:#d99;display:none}
+
+.mk{position:relative;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:bold;font-size:14px;border:2px solid #cfc6b5;background:#2b2926;color:#e6dccb;box-shadow:0 0 10px rgba(0,0,0,.8)}
+.mk b{position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;font-weight:400;font-size:11px;background:rgba(0,0,0,.7);padding:1px 6px;border-radius:6px}
+.mk.me{border-color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.2),0 0 14px #fff}
+.mk.zombie{background:radial-gradient(#e01212,#5a0000);border-color:#ff5050;color:#fff;font-size:20px;animation:zpulse 1.1s infinite;box-shadow:0 0 18px #f00}
+@keyframes zpulse{0%,100%{box-shadow:0 0 8px 2px rgba(255,0,0,.7)}50%{box-shadow:0 0 28px 12px rgba(255,0,0,.25)}}
+.mk.off{opacity:.45;filter:grayscale(1)}
+
+#panel{position:relative;z-index:6;background:linear-gradient(rgba(0,0,0,.75),#000);border-top:2px solid var(--blood);padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
+#info{font-size:14px;text-align:center;margin-bottom:8px;min-height:20px}
+#chips{max-height:66px;overflow-y:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.chip{padding:5px 10px;border-radius:14px;font-size:12px;border:1px solid #3a2a28;background:#120a0a}
+.chip.z{border-color:var(--red);color:#ff8a8a;background:#2a0505}
+.chip.off{opacity:.45}
+#log{font-size:11px;color:var(--muted);text-align:center;margin-top:7px;min-height:14px}
+
+/* overlays */
+#ov{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px;background:radial-gradient(circle,rgba(70,0,0,.92),rgba(0,0,0,.97))}
+#ov.show{display:flex;animation:fadein .35s ease}
+@keyframes fadein{from{opacity:0}}
+#ov h1{font-size:clamp(44px,13vw,80px);line-height:1;margin:0 0 14px;color:var(--red);text-shadow:0 0 22px #a00,0 4px 0 #300;animation:flicker 3s infinite}
+#ov p{max-width:380px;color:var(--bone);margin:6px 0 18px}
+#ov .btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px}
+#ov .reveal{font-family:'Creepster';font-size:34px;margin:6px 0 14px;min-height:42px;letter-spacing:.08em}
+.splat{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.splat i{position:absolute;border-radius:50%;background:radial-gradient(#b00,#500 70%,transparent 72%);animation:splat .7s cubic-bezier(.1,.8,.2,1) both}
+@keyframes splat{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:.85}}
+.shake{animation:shake .6s}
+@keyframes shake{10%,90%{transform:translate(-3px,1px)}20%,80%{transform:translate(5px,-2px)}30%,50%,70%{transform:translate(-8px,3px)}40%,60%{transform:translate(8px,-3px)}}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:200;background:#2a0505;border:1px solid var(--red);padding:10px 16px;border-radius:10px;font-size:14px;display:none;max-width:90%;text-align:center}
+#toast.show{display:block;animation:fadein .2s}
+#ov{overflow:auto;padding-top:calc(24px + env(safe-area-inset-top));padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+@media (max-height:700px){.logo{margin-top:6px;font-size:clamp(44px,12vw,68px)}.tag{margin-bottom:12px;font-size:13px}.card{padding:14px}input[type=text]{margin-bottom:10px;padding:10px 12px}}
+@media (max-width:380px){#time{font-size:38px;min-width:90px}#role{padding:6px 10px;font-size:12px}.chip{font-size:11px}}
+@media (orientation:landscape) and (max-height:520px){#top{padding-top:calc(10px + env(safe-area-inset-top))}#time{font-size:30px}#chips,#log{display:none}#info{margin-bottom:0}#panel{padding:6px 12px}#mute{top:6px}}
+#snd{position:fixed;top:calc(56px + env(safe-area-inset-top));right:10px;z-index:300;display:none;width:220px;background:rgba(15,2,2,.97);border:1px solid #6a1010;border-radius:10px;padding:12px 14px;box-shadow:0 0 24px rgba(0,0,0,.8)}
+#snd.open{display:block;animation:fadein .2s}
+#snd label{display:block;font-size:12px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+#snd input[type=range]{width:100%;margin-top:6px;accent-color:var(--red)}
+#mute{position:fixed;top:calc(14px + env(safe-area-inset-top));right:10px;z-index:300;width:36px;height:36px;padding:0;font-size:17px;border-radius:50%;background:rgba(20,2,2,.85);border:1px solid #6a1010;box-shadow:none}
+</style>
+</head>
+<body>
+<canvas id="fog"></canvas>
+<div class="drips" id="drips"></div>
+<div class="vignette"></div><div class="scan"></div><div id="danger"></div>
+
+<!-- HOME -->
+<main class="screen active" id="screen-home">
+  <h1 class="logo">ZOMBIE<br>RUN<small>TRUST NO ONE</small></h1>
+  <p class="tag">Up to 7 survivors. One of you is already infected. Nobody knows who. Real GPS. Real fear.</p>
+  <div class="card">
+    <label for="name">Your name</label>
+    <input id="name" type="text" maxlength="14" placeholder="Survivor" autocomplete="off">
+    <button id="btn-create" style="width:100%">Create room</button>
+    <div class="or">— OR —</div>
+    <label for="code">Room code</label>
+    <input id="code" type="text" maxlength="5" placeholder="•••••" autocomplete="off" autocapitalize="characters">
+    <button id="btn-join" class="ghost" style="width:100%">Join room</button>
+    <label class="chk"><input type="checkbox" id="sim"> Test mode (tap the map to move yourself, no GPS needed)</label>
+  </div>
+  <p class="foot">Allow location access when asked. Works best outdoors with GPS on, in an open area. Phone GPS is accurate to a few metres.</p>
+</main>
+
+<!-- LOBBY -->
+<main class="screen" id="screen-lobby">
+  <h2 class="creep" style="font-size:30px;margin:26px 0 0;color:var(--muted)">ROOM CODE</h2>
+  <div class="roomcode" id="l-code">-----</div>
+  <div class="row" style="max-width:420px;width:100%">
+    <button class="ghost" id="btn-copy">Copy link</button>
+    <button class="ghost" id="btn-share">Share</button>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="count" id="l-count"></div>
+    <ul class="plist" id="l-list"></ul>
+    <button id="btn-start" style="width:100%">Start the outbreak</button>
+    <div class="count" id="l-wait" style="display:none">Waiting for the host to start…</div>
+    <button class="ghost" id="btn-leave" style="width:100%;margin-top:12px;font-size:14px">Leave room</button>
+  </div>
+</main>
+
+<!-- GAME -->
+<main class="screen" id="screen-game">
+  <div id="top">
+    <div><div id="time">10:00</div><div id="phase"></div></div>
+    <div id="role" title="Tap to peek at your role">ROLE ▮▮▮</div>
+  </div>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="banner"></div>
+    <button id="recenter" title="Center on me">◎</button>
+    <div id="simhint">TEST MODE: tap the map to move</div>
+  </div>
+  <div id="panel">
+    <div id="info"></div>
+    <div id="chips"></div>
+    <div id="log"></div>
+  </div>
+</main>
+
+<button id="mute" title="Sound settings">🔊</button>
+<div id="snd">
+  <label>Effects <input type="range" id="v-sfx" min="0" max="100"></label>
+  <label>Music <input type="range" id="v-music" min="0" max="100"></label>
+  <label>Voice <input type="range" id="v-voice" min="0" max="100"></label>
+  <button class="ghost" id="v-mute" style="width:100%;font-size:14px;padding:9px">Mute all</button>
+</div>
+<div id="ov"></div>
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+/* ---------- atmosphere: drips + fog ---------- */
+(function drips() {
+  const box = $('#drips');
+  for (let i = 0; i < 16; i++) {
+    const s = document.createElement('span');
+    s.style.left = (3 + Math.random() * 94) + '%';
+    s.style.setProperty('--h', (16 + Math.random() * 46) + 'px');
+    s.style.setProperty('--d', (3.5 + Math.random() * 5) + 's');
+    s.style.setProperty('--w', (-Math.random() * 8) + 's');
+    s.style.width = (4 + Math.random() * 6) + 'px';
+    box.appendChild(s);
+  }
+})();
+(function fog() {
+  const c = $('#fog'), x = c.getContext('2d');
+  let W, H; const blobs = Array.from({ length: 9 }, () => ({ x: Math.random(), y: Math.random(), r: .25 + Math.random() * .35, vx: (Math.random() - .5) * .00018, vy: (Math.random() - .5) * .0001, a: .05 + Math.random() * .08 }));
+  const resize = () => { W = c.width = innerWidth; H = c.height = innerHeight; };
+  resize(); addEventListener('resize', resize);
+  (function loop() {
+    x.clearRect(0, 0, W, H);
+    for (const b of blobs) {
+      b.x += b.vx; b.y += b.vy;
+      if (b.x < -.2 || b.x > 1.2) b.vx *= -1;
+      if (b.y < -.2 || b.y > 1.2) b.vy *= -1;
+      const g = x.createRadialGradient(b.x * W, b.y * H, 0, b.x * W, b.y * H, b.r * Math.max(W, H));
+      g.addColorStop(0, `rgba(150,20,20,${b.a})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+    }
+    requestAnimationFrame(loop);
+  })();
+})();
+
+/* ---------- sound: synthesised with WebAudio + browser speech, no audio files needed ---------- */
+const SFX = (() => {
+  let ctx, master, sfxBus, musicBus, echoIn, nbuf, dr = null, loop = null, cur = null, mt = null, mlevel = 0, step8 = 0;
+  let muted = localStorage.getItem('zmute') === '1';
+  const vol = { sfx: .9, music: .55, voice: 1 };
+  try { Object.assign(vol, JSON.parse(localStorage.getItem('zvol') || '{}')); } catch {}
+  const said = {};
+
+  function unlock() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ctx.destination);
+      sfxBus = ctx.createGain(); sfxBus.gain.value = vol.sfx; sfxBus.connect(master);
+      musicBus = ctx.createGain(); musicBus.gain.value = vol.music; musicBus.connect(master);
+      // eerie echo for the music
+      echoIn = ctx.createGain();
+      const dl = ctx.createDelay(1), fb = ctx.createGain(), lp = ctx.createBiquadFilter();
+      dl.delayTime.value = .42; fb.gain.value = .45; lp.type = 'lowpass'; lp.frequency.value = 1400;
+      echoIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(musicBus);
+      nbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const d = nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    try { if (!said._u && window.speechSynthesis) { said._u = 1; const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch {}
+  }
+  const ready = () => ctx && ctx.state === 'running' && !muted;
+  const bus = (o) => (o.bus === 'music' ? musicBus : sfxBus);
+
+  function tone(f, dur, o = {}) {
+    if (!ready()) return;
+    const t = ctx.currentTime + (o.when || 0), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = o.type || 'sine'; osc.frequency.setValueAtTime(f, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(o.vol || .3, t + (o.attack || .01)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    let out = osc;
+    if (o.lp) { const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = o.lp; osc.connect(fl); out = fl; }
+    out.connect(g); g.connect(bus(o)); if (o.echo) g.connect(echoIn);
+    osc.start(t); osc.stop(t + dur + .05);
+  }
+  function noise(dur, o = {}) {
+    if (!ready()) return;
+    const t = ctx.currentTime + (o.when || 0), src = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = nbuf; fl.type = o.type || 'lowpass'; fl.frequency.setValueAtTime(o.f || 800, t);
+    if (o.to) fl.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+    fl.Q.value = o.q || 1;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(o.vol || .3, t + (o.attack || .01)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    src.connect(fl); fl.connect(g); g.connect(bus(o)); src.start(t, Math.random()); src.stop(t + dur + .05);
+  }
+
+  /* heartbeat / sonar ping loop */
+  const heartbeat = () => {
+    tone(62, .2, { vol: .8, to: 38 }); tone(120, .1, { vol: .25, to: 70 }); noise(.08, { f: 250, vol: .25 });
+    tone(52, .22, { vol: .6, to: 34, when: .2 }); tone(105, .1, { vol: .18, to: 60, when: .2 });
+  };
+  const ping = () => tone(1300, .3, { vol: .1, to: 950 });
+  function step() { if (!cur) { loop = null; return; } (cur.kind === 'hb' ? heartbeat : ping)(); loop = setTimeout(step, cur.ms); }
+  function growl(v = 1) {
+    tone(92, 1, { type: 'sawtooth', to: 52, vol: .3 * v, lp: 520, attack: .08 });
+    tone(99, 1, { type: 'sawtooth', to: 58, vol: .25 * v, lp: 480, attack: .08 });
+    noise(1, { f: 500, to: 160, vol: .3 * v, attack: .1 });
+  }
+
+  /* procedural horror music: slow minor-phrygian bed that speeds up and adds a pulse in the hunt */
+  const ROOTS = [55, 43.65, 49, 41.2]; // A1 F1 G1 E1
+  const SCALE = [220, 233.08, 261.63, 329.63, 349.23, 440]; // A Bb C E F A
+  function musicStep() {
+    const hunt = mlevel > .7, stepDur = 60 / (hunt ? 92 : 58) / 2;
+    if (mlevel && ready()) {
+      const bar = Math.floor(step8 / 8) % 4, s = step8 % 8, root = ROOTS[bar];
+      if (s === 0) {
+        tone(root, stepDur * 7.5, { type: 'sawtooth', vol: .16, lp: 220, attack: .3, bus: 'music' });
+        tone(root * 2, stepDur * 7.5, { type: 'triangle', vol: .1, attack: .5, bus: 'music' });
+        tone(root * 3, stepDur * 6, { type: 'sine', vol: .05, attack: .8, bus: 'music', echo: true });
+      }
+      if (hunt) {
+        if (s % 4 === 0) tone(72, .22, { vol: .4, to: 34, bus: 'music' });
+        if (s === 6) tone(72, .18, { vol: .28, to: 34, bus: 'music' });
+        if (s % 2 === 1) noise(.04, { type: 'highpass', f: 7000, vol: .05, bus: 'music' });
+      }
+      if (Math.random() < (hunt ? .38 : .22)) {
+        const n = SCALE[Math.floor(Math.random() * Math.random() * SCALE.length)] * (Math.random() < .2 ? 2 : 1);
+        tone(n, 1.8, { type: 'triangle', vol: .12, lp: 1600, attack: .02, bus: 'music', echo: true });
+      }
+      step8++;
+    }
+    mt = setTimeout(musicStep, stepDur * 1000);
+  }
+  function music(level) {
+    mlevel = level;
+    if (!level) { clearTimeout(mt); mt = null; return; }
+    if (!mt) musicStep();
+  }
+
+  /* spoken lines (browser speech synthesis, pitched down and slowed for a creepy voice) */
+  function say(text, key, cool = 6000) {
+    if (muted || vol.voice <= 0 || !window.speechSynthesis) return;
+    const now = Date.now(), k = key || text;
+    if (said[k] && now - said[k] < cool) return;
+    said[k] = now;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.pitch = .25; u.rate = .72; u.volume = vol.voice;
+      const v = speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang)); if (v) u.voice = v;
+      speechSynthesis.speak(u);
+    } catch {}
+  }
+
+  return {
+    unlock, say,
+    isMuted: () => muted,
+    vol: () => vol,
+    toggle() {
+      muted = !muted; localStorage.setItem('zmute', muted ? '1' : '0');
+      if (master) master.gain.value = muted ? 0 : 1;
+      if (muted) { try { speechSynthesis.cancel(); } catch {} }
+      return muted;
+    },
+    setVol(kind, v) {
+      vol[kind] = v; localStorage.setItem('zvol', JSON.stringify(vol));
+      if (kind === 'sfx' && sfxBus) sfxBus.gain.value = v;
+      if (kind === 'music' && musicBus) musicBus.gain.value = v;
+    },
+    click() { tone(190, .08, { type: 'square', vol: .07, to: 90, lp: 700 }); },
+    blip() { tone(520, .12, { vol: .12 }); tone(780, .16, { vol: .1, when: .08 }); },
+    tick(last) { tone(last ? 1500 : 1000, .05, { type: 'square', vol: last ? .1 : .06 }); },
+    growl,
+    hide() { [55, 58.3].forEach((f) => tone(f, 3, { type: 'sawtooth', vol: .22, lp: 300, attack: .9 })); tone(82.4, 3, { type: 'triangle', vol: .14, attack: .9 }); noise(2.5, { f: 200, to: 900, vol: .12, attack: 1 }); },
+    siren() { for (let i = 0; i < 3; i++) { tone(600, .45, { type: 'sawtooth', to: 920, vol: .14, lp: 1800, when: i * .9 }); tone(920, .45, { type: 'sawtooth', to: 600, vol: .14, lp: 1800, when: i * .9 + .45 }); } growl(.7); },
+    infected() { growl(1.3); tone(70, 1.3, { to: 28, vol: .8 }); noise(.7, { f: 3500, to: 150, vol: .45 }); },
+    win() { [392, 494, 587, 784].forEach((f, i) => tone(f, .7, { type: 'triangle', vol: .22, when: i * .18 })); },
+    lose() { tone(220, 1.6, { type: 'sawtooth', to: 110, vol: .22, lp: 600 }); tone(233, 1.6, { type: 'sawtooth', to: 117, vol: .2, lp: 600 }); growl(1); },
+    proximity(kind, ms) {
+      if (!kind) { clearTimeout(loop); loop = null; cur = null; return; }
+      cur = { kind, ms }; if (!loop) step();
+    },
+    /* ambient drone + music bed. level: 0 = off, .5 = hide phase, 1 = hunt */
+    drone(level) {
+      music(level);
+      if (!level) { if (dr) { const d = dr; dr = null; d.g.gain.setTargetAtTime(0, ctx.currentTime, .4); setTimeout(() => { try { d.a.stop(); d.b.stop(); d.l.stop(); } catch {} }, 1800); } return; }
+      if (!ready()) return;
+      if (!dr) {
+        const a = ctx.createOscillator(), b = ctx.createOscillator(), l = ctx.createOscillator(), lg = ctx.createGain(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        a.type = b.type = 'sawtooth'; a.frequency.value = 46; b.frequency.value = 46.8;
+        f.type = 'lowpass'; f.frequency.value = 120; l.frequency.value = .12; lg.gain.value = 50;
+        l.connect(lg); lg.connect(f.frequency); g.gain.value = 0;
+        a.connect(f); b.connect(f); f.connect(g); g.connect(musicBus); a.start(); b.start(); l.start();
+        dr = { a, b, l, f, g };
+      }
+      dr.g.gain.setTargetAtTime(level > .7 ? .09 : .05, ctx.currentTime, 1.2);
+      dr.f.frequency.setTargetAtTime(level > .7 ? 190 : 120, ctx.currentTime, 1.5);
+    },
+  };
+})();
+document.addEventListener('pointerdown', () => SFX.unlock(), { passive: true });
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button') && !e.target.closest('#mute,#snd')) SFX.click();
+  if (!e.target.closest('#snd,#mute')) $('#snd').classList.remove('open');
+});
+(function soundPanel() {
+  const icon = () => { $('#mute').textContent = SFX.isMuted() ? '🔇' : '🔊'; $('#v-mute').textContent = SFX.isMuted() ? 'Unmute all' : 'Mute all'; };
+  ['sfx', 'music', 'voice'].forEach((k) => {
+    const el = $('#v-' + k); el.value = Math.round(SFX.vol()[k] * 100);
+    el.oninput = () => SFX.setVol(k, el.value / 100);
+    el.onchange = () => { SFX.unlock(); if (k === 'voice') SFX.say('The dead are listening.', 'vtest', 0); if (k === 'sfx') SFX.growl(.5); };
+  });
+  $('#mute').onclick = () => { SFX.unlock(); $('#snd').classList.toggle('open'); };
+  $('#v-mute').onclick = () => { SFX.unlock(); SFX.toggle(); icon(); };
+  icon();
+})();
+let lastSec = 0, lastCount = 0;
+
+/* ---------- state ---------- */
+let ws, S = null, myId = null, myName = '', sim = localStorage.getItem('zsim') === '1';
+let myPos = null, offset = 0, geoStarted = false, lastPhase = null, peekUntil = 0;
+let map = null, mapReady = false, centered = false, markers = {}, circles = {}, meCircle = null;
+const log = [];
+
+$('#sim').checked = sim;
+$('#sim').onchange = (e) => { sim = e.target.checked; localStorage.setItem('zsim', sim ? '1' : '0'); };
+$('#name').value = localStorage.getItem('zname') || '';
+const urlRoom = new URLSearchParams(location.search).get('room');
+if (urlRoom) $('#code').value = urlRoom.toUpperCase().slice(0, 5);
+
+function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 'screen-' + id)); }
+function toast(msg, ms = 2800) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), ms); }
+function vib(p) { try { navigator.vibrate && navigator.vibrate(p); } catch {} }
+
+/* ---------- network ---------- */
+function connect(onopen) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = onopen;
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => {
+    if (!S) return;
+    toast('Connection lost. Reconnecting…');
+    setTimeout(() => connect(() => ws.send(JSON.stringify({ t: 'join', code: S.code, name: myName, playerId: myId }))), 1500);
+  };
+}
+const tx = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+
+/* ---------- location permission step (runs inside the button tap so iOS/Android show their prompt) ---------- */
+let gateGo = null;
+function gpsOv(kind) {
+  const body = {
+    denied: `<h1>LOCATION<br>BLOCKED</h1><p>The game needs your live location to find the zombie. Allow location for this site, then try again.</p>
+      <p style="color:var(--muted);font-size:13px"><b>iPhone:</b> tap <b>aA</b> in the address bar, then Website Settings, then Location, then Allow. Also check Settings, Privacy and Security, Location Services is on.<br><br><b>Android (Chrome):</b> tap the lock icon next to the address, then Permissions, then Location, then Allow.</p>`,
+    insecure: `<h1>SECURE LINK<br>NEEDED</h1><p>Phones only share GPS with https:// websites. Open the https version of this link and try again.</p>`,
+    unsupported: `<h1>NO GPS</h1><p>This browser cannot share location. Try Chrome or Safari, or use test mode.</p>`,
+  }[kind];
+  openOv(body + `<div class="btns">${kind === 'denied' ? '<button id="g-retry">Try again</button>' : ''}<button class="ghost" id="g-sim">Use test mode instead</button><button class="ghost" id="g-x">Cancel</button></div>`);
+  if ($('#g-retry')) $('#g-retry').onclick = () => { closeOv(); needGps(gateGo); };
+  $('#g-sim').onclick = () => { sim = true; $('#sim').checked = true; localStorage.setItem('zsim', '1'); closeOv(); gateGo && gateGo(); };
+  $('#g-x').onclick = closeOv;
+}
+function needGps(go) {
+  gateGo = go;
+  if (sim) return go();
+  if (!window.isSecureContext) return gpsOv('insecure');
+  if (!navigator.geolocation) return gpsOv('unsupported');
+  toast('Asking for your location… tap Allow', 2500);
+  navigator.geolocation.getCurrentPosition(
+    (p) => { $('#toast').classList.remove('show'); setMy(p.coords.latitude, p.coords.longitude, p.coords.accuracy); go(); },
+    (e) => { if (e.code === 1) gpsOv('denied'); else { toast('GPS signal is weak. Move outside, it will keep trying.', 4000); go(); } },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+  );
+}
+
+/* ---------- keep the screen awake so GPS keeps reporting ---------- */
+let wl = null;
+async function keepAwake(on) {
+  try {
+    if (on && 'wakeLock' in navigator && !wl) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; }); }
+    else if (!on && wl) { await wl.release(); wl = null; }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S) { keepAwake(true); sendLoc(); } });
+
+function getName() { myName = ($('#name').value || '').trim() || 'Survivor'; localStorage.setItem('zname', myName); return myName; }
+$('#btn-create').onclick = () => { getName(); needGps(() => connect(() => tx({ t: 'create', name: myName }))); };
+$('#btn-join').onclick = () => {
+  getName();
+  const code = $('#code').value.trim().toUpperCase();
+  if (code.length < 5) return toast('Enter the 5-character room code.');
+  needGps(() => connect(() => tx({ t: 'join', code, name: myName })));
+};
+$('#btn-start').onclick = () => tx({ t: 'start' });
+$('#btn-leave').onclick = leave;
+function leave() {
+  tx({ t: 'leave' }); S = null; lastPhase = null; lastCount = 0; closeOv(); SFX.drone(0); SFX.proximity(null); keepAwake(false);
+  if (ws) { ws.onclose = null; ws.close(); }
+  localStorage.removeItem('zsess'); show('home'); history.replaceState(null, '', location.pathname);
+  $('#danger').classList.remove('on');
+}
+$('#btn-copy').onclick = async () => {
+  const url = `${location.origin}${location.pathname}?room=${S.code}`;
+  try { await navigator.clipboard.writeText(url); toast('Invite link copied!'); } catch { toast(url, 6000); }
+};
+$('#btn-share').onclick = () => {
+  const url = `${location.origin}${location.pathname}?room=${S.code}`;
+  if (navigator.share) navigator.share({ title: 'ZOMBIE RUN', text: `Join my outbreak. Room code ${S.code}`, url }).catch(() => {});
+  else $('#btn-copy').click();
+};
+
+function handle(m) {
+  if (m.t === 'error') {
+    if (!S) { try { ws.onclose = null; ws.close(); } catch {} localStorage.removeItem('zsess'); localStorage.removeItem('zpid'); myId = null; }
+    toast(m.msg); return;
+  }
+  if (m.t === 'joined') { myId = m.id; return; }
+  if (m.t === 'event') return onEvent(m);
+  if (m.t === 'state') return onState(m);
+}
+
+/* ---------- geolocation ---------- */
+function banner(msg) { const b = $('#banner'); b.textContent = msg; b.style.display = msg ? 'block' : 'none'; }
+function setMy(lat, lng, acc) { myPos = { lat, lng, acc }; sendLoc(); if (mapReady) drawMarkers(); }
+function sendLoc() { if (myPos) tx({ t: 'loc', ...myPos }); }
+setInterval(sendLoc, 3000);
+function startGeo() {
+  if (geoStarted) return; geoStarted = true;
+  if (!navigator.geolocation) { if (!sim) banner('This device does not support GPS. Use test mode.'); return; }
+  const ok = (p) => { if (!sim) { banner(''); setMy(p.coords.latitude, p.coords.longitude, p.coords.accuracy); } };
+  const bad = (e) => { if (!sim) banner(e.code === 1 ? 'Location is blocked. Allow it in your browser settings, then reload this page.' : 'Searching for GPS signal… move to open sky.'); };
+  if (sim) navigator.geolocation.getCurrentPosition((p) => { if (!myPos) setMy(p.coords.latitude, p.coords.longitude, 5); }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
+  else navigator.geolocation.watchPosition(ok, bad, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+}
+
+/* ---------- map ---------- */
+function initMap() {
+  if (map) { setTimeout(() => map.invalidateSize(), 50); return; }
+  map = L.map('map', { zoomControl: false, attributionControl: true, maxZoom: 21 }).setView([37.7749, -122.4194], 3);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+  map.on('click', (e) => { if (sim && S && S.phase !== 'over') setMy(e.latlng.lat, e.latlng.lng, 3); });
+  $('#recenter').onclick = () => { if (myPos) map.setView([myPos.lat, myPos.lng], 19, { animate: true }); };
+  mapReady = true; setTimeout(() => map.invalidateSize(), 80);
+}
+const mkIcon = (cls, label, name) => L.divIcon({ className: '', iconSize: [36, 36], iconAnchor: [18, 18], html: `<div class="mk ${cls}">${label}<b>${esc(name)}</b></div>` });
+
+function drawMarkers() {
+  if (!S || !mapReady) return;
+  const seen = new Set();
+  for (const p of S.players) {
+    const isMe = p.id === myId;
+    const pos = isMe && myPos ? myPos : p;
+    if (pos.lat == null) continue;
+    seen.add(p.id);
+    const z = p.role === 'zombie';
+    const cls = (z ? 'zombie ' : '') + (isMe ? 'me ' : '') + (p.connected ? '' : 'off');
+    const key = cls + p.name;
+    const label = z ? '🧟' : esc(p.name.slice(0, 1).toUpperCase());
+    if (!markers[p.id]) markers[p.id] = { m: L.marker([pos.lat, pos.lng], { icon: mkIcon(cls, label, isMe ? 'YOU' : p.name), zIndexOffset: z ? 500 : isMe ? 1000 : 0 }).addTo(map), key };
+    const mk = markers[p.id];
+    mk.m.setLatLng([pos.lat, pos.lng]);
+    if (mk.key !== key) { mk.m.setIcon(mkIcon(cls, label, isMe ? 'YOU' : p.name)); mk.key = key; }
+    // zombie catch radius
+    if (z && S.phase === 'hunt') {
+      if (!circles[p.id]) circles[p.id] = L.circle([pos.lat, pos.lng], { radius: S.cfg.radius, color: '#ff1a1a', weight: 1, fillColor: '#ff0000', fillOpacity: .13, interactive: false }).addTo(map);
+      circles[p.id].setLatLng([pos.lat, pos.lng]).setRadius(S.cfg.radius);
+    } else if (circles[p.id]) { map.removeLayer(circles[p.id]); delete circles[p.id]; }
+  }
+  for (const id of Object.keys(markers)) if (!seen.has(id)) { map.removeLayer(markers[id].m); delete markers[id]; if (circles[id]) { map.removeLayer(circles[id]); delete circles[id]; } }
+  if (myPos) {
+    if (!meCircle) meCircle = L.circle([myPos.lat, myPos.lng], { radius: myPos.acc || 5, color: '#fff', weight: 1, fillOpacity: .05, interactive: false }).addTo(map);
+    meCircle.setLatLng([myPos.lat, myPos.lng]).setRadius(Math.max(myPos.acc || 5, 2));
+    if (!centered) { centered = true; map.setView([myPos.lat, myPos.lng], 19); }
+  }
+}
+
+/* ---------- state rendering ---------- */
+function onState(m) {
+  S = m; if (m.phase === 'lobby' && lastPhase && lastPhase !== 'lobby') { lastSec = 0; }
+  offset = m.now - Date.now();
+  localStorage.setItem('zsess', JSON.stringify({ code: m.code }));
+  startGeo(); keepAwake(true);
+  SFX.drone(m.phase === 'hunt' ? 1 : m.phase === 'hide' ? .5 : 0);
+  const prev = lastPhase;
+  if (m.phase === 'lobby') {
+    show('lobby'); renderLobby();
+    if (prev && prev !== 'lobby') { closeOv(); centered = false; }
+  } else {
+    show('game'); initMap();
+    if (sim && !myPos) { const c = map.getCenter(); setMy(c.lat + (Math.random() - .5) * .0004, c.lng + (Math.random() - .5) * .0004, 3); }
+    $('#simhint').style.display = sim ? 'block' : 'none';
+    renderGame();
+    if (m.phase !== prev) onPhase(m.phase, prev);
+  }
+  lastPhase = m.phase;
+}
+
+function renderLobby() {
+  $('#l-code').textContent = S.code;
+  if (lastCount && S.players.length > lastCount) SFX.blip();
+  lastCount = S.players.length;
+  $('#l-count').textContent = `${S.players.length} / ${S.cfg.max} survivors in the room`;
+  $('#l-list').innerHTML = S.players.map((p) => `<li class="${p.connected ? '' : 'off'}"><span class="dot"></span>${esc(p.name)}${p.id === myId ? ' (you)' : ''}<span class="tagh">${p.id === S.hostId ? 'HOST' : ''}</span></li>`).join('');
+  const host = S.hostId === myId;
+  $('#btn-start').style.display = host ? 'block' : 'none';
+  $('#btn-start').disabled = S.players.length < S.cfg.min;
+  $('#btn-start').textContent = S.players.length < S.cfg.min ? `Need ${S.cfg.min}+ players` : 'Start the outbreak';
+  $('#l-wait').style.display = host ? 'none' : 'block';
+}
+
+function myRole() { const me = S.players.find((p) => p.id === myId); return me ? me.role : null; }
+function nearest(pred) {
+  if (!myPos) return null; let best = null;
+  for (const p of S.players) { if (p.id === myId || p.lat == null || !pred(p)) continue; const d = dist(myPos, p); if (best === null || d < best) best = d; }
+  return best;
+}
+function dist(a, b) {
+  const R = 6371000, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function renderGame() {
+  drawMarkers();
+  const role = myRole(), hunt = S.phase === 'hunt', over = S.phase === 'over';
+  const roleEl = $('#role');
+  const showRole = hunt || over || Date.now() < peekUntil;
+  roleEl.className = showRole ? (role === 'zombie' ? 'z' : 'h') : '';
+  roleEl.textContent = showRole ? (role === 'zombie' ? '🧟 ZOMBIE' : '🙂 HUMAN') : 'ROLE ▮▮▮ tap';
+  $('#chips').innerHTML = S.players.map((p) => `<span class="chip ${p.role === 'zombie' ? 'z' : ''} ${p.connected ? '' : 'off'}">${p.role === 'zombie' ? '🧟 ' : ''}${esc(p.name)}${p.id === myId ? ' ★' : ''}</span>`).join('');
+  const humans = S.players.filter((p) => p.role === 'human').length, zs = S.players.filter((p) => p.role === 'zombie').length;
+  if (hunt && role === 'human' && humans === 1) SFX.say('You are the last survivor.', 'last', 120000);
+  let info = '';
+  if (S.phase === 'hide') info = 'The zombie is among you. Find cover. Stay quiet.';
+  else if (hunt || over) {
+    if (role === 'zombie') {
+      const d = nearest((p) => p.role === 'human');
+      info = d == null ? 'Hunt them down. Get within ' + S.cfg.radius + ' m to turn them.' : `Nearest survivor: <b>${Math.round(d)} m</b>. Touch range: ${S.cfg.radius} m`;
+    } else {
+      const d = nearest((p) => p.role === 'zombie');
+      info = d == null ? 'Zombie location unknown. Keep moving.' : `Nearest zombie: <b>${Math.round(d)} m</b>`;
+    }
+    info += ` · 🙂 ${humans} left · 🧟 ${zs}`;
+  }
+  $('#info').innerHTML = info;
+  danger();
+  $('#log').textContent = log.slice(-2).join('   |   ');
+}
+$('#role').onclick = () => { peekUntil = Date.now() + 2500; if (S) { renderGame(); setTimeout(renderGame, 2600); } };
+
+function danger() {
+  const el = $('#danger');
+  const role = S && S.phase === 'hunt' ? myRole() : null;
+  if (role === 'human') {
+    const d = nearest((p) => p.role === 'zombie');
+    if (d == null || d > 40) { el.classList.remove('on'); SFX.proximity(null); return; }
+    const beat = Math.max(.35, Math.min(1.4, d / 30));
+    el.style.setProperty('--beat', beat + 's'); el.classList.add('on');
+    SFX.proximity('hb', beat * 1000); // heartbeat speeds up as the zombie closes in
+    if (d < 15) { vib([120, 80, 120]); SFX.say(['The zombie is close.', 'Do not look back.', 'It is right behind you.'][Math.floor(Math.random() * 3)], 'near', 15000); }
+    return;
+  }
+  el.classList.remove('on');
+  if (role === 'zombie') {
+    const d = nearest((p) => p.role === 'human');
+    if (d != null && d < 10) SFX.say('Prey nearby.', 'prey', 20000);
+    if (d != null && d <= 40) return SFX.proximity('ping', Math.max(300, Math.min(1600, d * 40))); // sonar ping gets faster near prey
+  }
+  SFX.proximity(null);
+}
+
+setInterval(() => {
+  if (!S || S.phase === 'lobby') return;
+  const now = Date.now() + offset, t = $('#time');
+  t.textContent = fmt(S.endsAt - now);
+  const rem = S.endsAt - now;
+  if (S.phase === 'hunt' && rem > 0 && rem <= 10000) { const sec = Math.ceil(rem / 1000); if (sec !== lastSec) { lastSec = sec; SFX.tick(sec <= 3); } }
+  if (S.phase === 'hunt' && rem <= 60000 && rem > 55000) SFX.say('One minute left.', 'min', 120000);
+  t.classList.toggle('low', S.phase !== 'over' && S.endsAt - now < 60000);
+  $('#phase').textContent = S.phase === 'hide' ? `HIDE · the hunt begins in ${fmt(S.hideEndsAt - now)}` : S.phase === 'hunt' ? 'THE HUNT IS ON' : 'GAME OVER';
+}, 250);
+
+/* ---------- overlays & events ---------- */
+function openOv(html) { $('#ov').innerHTML = html; $('#ov').classList.add('show'); }
+function closeOv() { $('#ov').classList.remove('show'); $('#ov').innerHTML = ''; }
+function splatHtml(n = 9) {
+  return '<div class="splat">' + Array.from({ length: n }, () => { const s = 60 + Math.random() * 190; return `<i style="width:${s}px;height:${s}px;left:${Math.random() * 100 - 8}%;top:${Math.random() * 100 - 8}%;animation-delay:${Math.random() * .4}s"></i>`; }).join('') + '</div>';
+}
+
+function onPhase(phase, prev) {
+  if (phase === 'hide') {
+    openOv(`<h1>RUN AND HIDE<br>FROM THE ZOMBIE</h1>
+      <p>One of you has been infected. Nobody knows who. Scatter and find cover before the hunt begins.</p>
+      <div class="reveal" id="rv"></div>
+      <div class="btns"><button class="ghost" id="peek">👁 Peek at my role</button><button id="ready">I'm ready</button></div>`);
+    $('#peek').onclick = () => { const r = myRole(); const rv = $('#rv'); rv.textContent = r === 'zombie' ? '🧟 YOU ARE THE ZOMBIE' : '🙂 YOU ARE HUMAN'; rv.style.color = r === 'zombie' ? 'var(--red)' : '#9fe0a0'; setTimeout(() => { if ($('#rv')) $('#rv').textContent = ''; }, 2500); };
+    $('#ready').onclick = closeOv;
+    vib([200, 100, 200]); SFX.hide(); SFX.say('Run. And hide. The zombie is among you.', 'hide', 3000);
+  } else if (phase === 'hunt' && prev === 'hide') {
+    const z = myRole() === 'zombie';
+    openOv(`${splatHtml(6)}<h1>THE HUNT<br>BEGINS</h1><p>${z ? 'You are the zombie. Find them. Get close. Turn them all.' : 'The zombie is now visible on the map. Run!'}</p>`);
+    vib([300, 100, 300, 100, 500]); SFX.siren(); SFX.say(z ? 'Hunt them. Turn them all.' : 'The hunt has begun. Run.', 'hunt', 3000);
+    setTimeout(closeOv, 3200);
+  } else if (phase === 'over') {
+    const humans = S.players.filter((p) => p.role === 'human'), zs = S.players.filter((p) => p.role === 'zombie');
+    const host = S.hostId === myId, hw = S.winner === 'humans';
+    openOv(`${hw ? '' : splatHtml(10)}<h1>${hw ? 'YOU SURVIVED' : 'THE DEAD<br>HAVE WON'}</h1>
+      <p>${hw ? `Dawn breaks. ${humans.length} survivor${humans.length === 1 ? '' : 's'} made it: ${humans.map((p) => esc(p.name)).join(', ')}.` : 'Everyone has been infected. There is no one left to run.'}</p>
+      <p style="color:var(--muted)">Zombies: ${zs.map((p) => esc(p.name)).join(', ') || '—'}</p>
+      <div class="btns">${host ? '<button id="again">Play again</button>' : '<p style="color:var(--muted)">Waiting for host to play again…</p>'}<button class="ghost" id="bye">Leave room</button></div>`);
+    if (host) $('#again').onclick = () => tx({ t: 'again' });
+    $('#bye').onclick = leave;
+    vib(hw ? [100, 50, 100] : [600]); hw ? SFX.win() : SFX.lose(); SFX.say(hw ? 'You survived.' : 'The dead have won.', 'over', 3000);
+  }
+}
+
+function onEvent(e) {
+  if (e.kind !== 'infect') return;
+  if (e.victim === myId) {
+    document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 700);
+    openOv(`${splatHtml(14)}<h1>YOU'VE BEEN<br>INFECTED</h1><p><b>${esc(e.byName)}</b> got you. You are one of them now. Go turn the rest.</p><div class="btns"><button id="ok">Hunt</button></div>`);
+    $('#ok').onclick = closeOv; vib([500, 100, 500, 100, 800]); SFX.infected(); SFX.say('You have been infected.', 'inf', 3000);
+    log.push(`You were turned by ${e.byName}`);
+  } else {
+    toast(`💀 ${e.victimName} was turned by ${e.byName}`, 3500); vib([200]); SFX.growl(.5); SFX.say(`${e.victimName} has been turned.`, 't' + e.victim, 3000);
+    log.push(`${e.victimName} turned by ${e.byName}`);
+  }
+  if (S) renderGame();
+}
+
+/* ---------- auto-rejoin after refresh ---------- */
+(function resume() {
+  try {
+    const s = JSON.parse(localStorage.getItem('zsess') || 'null');
+    if (!s) return;
+    // playerId is not persisted across page loads on purpose in lobby; mid-game rejoin needs it
+    const pid = localStorage.getItem('zpid');
+    if (!pid) return;
+    myName = localStorage.getItem('zname') || 'Survivor'; myId = pid;
+    connect(() => tx({ t: 'join', code: s.code, name: myName, playerId: pid }));
+  } catch {}
+})();
+setInterval(() => { if (myId) localStorage.setItem('zpid', myId); }, 1000);
+</script>
+</body>
+</html>
