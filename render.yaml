@@ -1,0 +1,9 @@
+# One-click deploy on Render (https://render.com): New > Blueprint > pick this repo
+services:
+  - type: web
+    name: zombie-run
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
